@@ -8,6 +8,7 @@ import com.lvmama.nebula.bean.vo.FileInfo;
 import com.lvmama.utils.DateUtils;
 import com.lvmama.utils.http.ApiService;
 import com.lvmama.utils.http.HttpResult;
+import org.omg.PortableInterceptor.INACTIVE;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -30,8 +31,7 @@ import java.util.*;
  */
 @RestController
 @RequestMapping("/flow/contract/merchant")
-public class FlowService
-{
+public class FlowService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
@@ -50,7 +50,6 @@ public class FlowService
         String starter = startMerchantContract.getStarter();
 
 
-
         // 组装参数，发起流程
         Map<String, Object> mapParameter = new HashMap<>();
         mapParameter.put("deploymentId", deploymentId);
@@ -60,7 +59,7 @@ public class FlowService
 
         HttpResult result = apiService.doPost(ACTIVITI_URL, mapParameter);
 
-        if(result.getStatus() == 200)
+        if (result.getStatus() == 200)
             return "success";
         return "fail";
     }
@@ -68,6 +67,7 @@ public class FlowService
 
     /**
      * 获取合同文件
+     *
      * @param request
      * @param response
      */
@@ -76,7 +76,7 @@ public class FlowService
         String merchantId = request.getParameter("merchantId");
         String contractId = request.getParameter("contractId");
 
-        if(contractId == null) {
+        if (contractId == null) {
             response.setStatus(404);
             return;
         }
@@ -86,7 +86,7 @@ public class FlowService
         FileInfo fileInfo = jdbcTemplate.query(sql, new ResultSetExtractor<FileInfo>() {
             @Override
             public FileInfo extractData(ResultSet rs) throws SQLException, DataAccessException {
-                if(rs.next()) {
+                if (rs.next()) {
                     FileInfo file = new FileInfo();
                     file.setFileName(rs.getNString(1));
                     file.setFileType(rs.getString(2));
@@ -97,8 +97,7 @@ public class FlowService
             }
         });
 
-        if(fileInfo != null)
-        {
+        if (fileInfo != null) {
             response.setHeader("Content-Type", fileInfo.getFileType());
             response.setHeader("Content-Disposition", "attachment:filename=" + fileInfo.getFileName());
             response.setCharacterEncoding("utf-8");
@@ -110,9 +109,7 @@ public class FlowService
             while ((len = inputStream.read(b, 0, 1024)) != -1) {
                 response.getOutputStream().write(b, 0, len);
             }
-        }
-        else
-        {
+        } else {
             response.setStatus(404);
         }
     }
@@ -129,9 +126,8 @@ public class FlowService
             " where c.id=";
 
     @RequestMapping(value = "/checkContractView", method = RequestMethod.GET)
-    public ContractView checkContractView(int contractId)
-    {
-        if(contractId <= 0)
+    public ContractView checkContractView(int contractId) {
+        if (contractId <= 0)
             return null;
 
         String sql = SELECT_CONTRACT_SQL + contractId;
@@ -141,7 +137,7 @@ public class FlowService
             public List<ContractView> extractData(ResultSet rs) throws SQLException, DataAccessException {
                 List<ContractView> list = new ArrayList<>();
 
-                if(rs.next()) {
+                if (rs.next()) {
                     ContractView cv = new ContractView();
 
                     // TODO
@@ -174,8 +170,7 @@ public class FlowService
             }
         });
 
-        if(contractViews.size() > 0)
-        {
+        if (contractViews.size() > 0) {
             ContractView contractView = contractViews.get(0);
 
             sql = SELECT_CONTRACT_ATTACH + contractView.getId();
@@ -185,12 +180,27 @@ public class FlowService
                 public List<ContractAttach> extractData(ResultSet rs) throws SQLException, DataAccessException {
                     List<ContractAttach> list = new ArrayList<>();
 
-                    while(rs.next()) {
+                    while (rs.next()) {
                         ContractAttach ca = new ContractAttach();
                         ca.setId(rs.getInt("id"));
                         ca.setType(rs.getString("type"));
-                        ca.setSettlementType(rs.getString("settlement_type"));
-                        ca.setInvoiceContent(rs.getString("invoice_content"));
+
+                        //处理settlement_type，invoice_content
+                        if (rs.getString("settlement_type").equals(Settlement_type.NORMAL.getIndex())) {
+                            ca.setSettlementType(Settlement_type.NORMAL.getName());
+                        } else if (rs.getString("settlement_type").equals(Settlement_type.ORDER.getIndex())) {
+                            ca.setSettlementType(Settlement_type.ORDER.getName());
+                        } else {
+                            ca.setSettlementType(Settlement_type.API.getName());
+                        }
+
+                        if (rs.getString("invoice_content").equals(Invoice_content.TICKET.getIndex())) {
+                            ca.setInvoiceContent(Invoice_content.TICKET.getName());
+                        } else if (rs.getString("invoice_content").equals(Invoice_content.TOUR.getIndex())) {
+                            ca.setInvoiceContent(Invoice_content.TOUR.getName());
+                        } else {
+                            ca.setInvoiceContent(Invoice_content.HOTEL.getName());
+                        }
                         ca.setPartyaSignTime(DateUtils.dateFormatYYYYMMDDHHMMSS(rs.getTimestamp("partya_sign_time")));
                         ca.setPartybSignTime(DateUtils.dateFormatYYYYMMDDHHMMSS(rs.getTimestamp("partyb_sign_time")));
                         ca.setPartyaEmail(rs.getString("partya_email"));
@@ -213,4 +223,61 @@ public class FlowService
         return null;
     }
 
+    // 结算方式
+    enum Settlement_type {
+        NORMAL("一般模式", "NORMAL"), API("API", "API"), ORDER("按单结算", "ORDER");
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getIndex() {
+            return index;
+        }
+
+        public void setIndex(String index) {
+            this.index = index;
+        }
+
+        private String name;
+        private String index;
+
+        private Settlement_type(String name, String index) {
+            this.name = name;
+            this.index = index;
+        }
+
+    }
+
+    // 发票内容
+    enum Invoice_content {
+        TICKET("门票服务费", "TICKET"), TOUR("旅游费", "TOUR"), HOTEL("住宿代理费", "HOTEL");
+
+        private String name;
+        private String index;
+        private Invoice_content(String name, String index) {
+            this.name = name;
+            this.index = index;
+        }
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getIndex() {
+            return index;
+        }
+
+        public void setIndex(String index) {
+            this.index = index;
+        }
+
+    }
 }
