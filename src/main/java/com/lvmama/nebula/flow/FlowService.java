@@ -2,9 +2,7 @@ package com.lvmama.nebula.flow;
 
 import com.alibaba.fastjson.JSONObject;
 import com.lvmama.nebula.bean.dto.StartMerchantContractDTO;
-import com.lvmama.nebula.bean.vo.ContractAttach;
-import com.lvmama.nebula.bean.vo.ContractView;
-import com.lvmama.nebula.bean.vo.FileInfo;
+import com.lvmama.nebula.bean.vo.*;
 import com.lvmama.utils.DateUtils;
 import com.lvmama.utils.http.ApiService;
 import com.lvmama.utils.http.HttpResult;
@@ -278,6 +276,71 @@ public class FlowService {
         public void setIndex(String index) {
             this.index = index;
         }
-
     }
+
+        private static final String H_FileAtt_SQL = "SELECT ID,MERCHANT_ID FROM CONTRACT WHERE ID =";
+        private static final String Z_FileAtt_SQL = "SELECT MATERIAL_NAME,MATERIAL_URLL FROM TNT_USER_MATERIAL WHERE MERCHANT_ID =";
+
+        @RequestMapping(value = "/FileAttDownload",method = RequestMethod.GET)
+        public FileAtt FileAttDownload(int contractId){
+
+            if (contractId <= 0)
+                return null;
+
+            String sql = H_FileAtt_SQL + contractId;
+
+            List<FileAtt> fileAtts = jdbcTemplate.query(sql,new ResultSetExtractor<List<FileAtt>>(){
+
+                @Override
+                public List<FileAtt> extractData(ResultSet rs) throws SQLException, DataAccessException {
+
+                    List<FileAtt> list = new ArrayList<>();
+
+                    if(rs.next()){
+
+                        FileAtt fileAtt = new FileAtt();
+
+                        fileAtt.setContractId(rs.getInt("ID"));
+                        fileAtt.setMerchantId(rs.getInt("MERCHANT_ID"));
+                        list.add(fileAtt);
+                    }
+
+                    return list;
+                }
+            });
+
+            if(fileAtts.size()>0){
+
+                FileAtt fileAtt = fileAtts.get(0);
+
+                sql = Z_FileAtt_SQL + fileAtt.getMerchantId();
+                List<FileQul> FileQul = jdbcTemplate.query(sql,new ResultSetExtractor<List<FileQul>>(){
+
+                    @Override
+                    public List<FileQul> extractData(ResultSet rs) throws SQLException, DataAccessException {
+
+                        List<FileQul> listh = new ArrayList<>();
+
+                        while (rs.next()){
+                            FileQul fileQul = new FileQul();
+                            fileQul.setMaterialName(rs.getString("MATERIAL_NAME"));
+                            fileQul.setMaterialUrll(rs.getString("MATERIAL_URLL"));
+                            listh.add(fileQul);
+                        }
+
+                        return listh;
+                    }
+
+                });
+
+                fileAtt.setFileQulList(FileQul);
+
+                return fileAtt;
+
+            }
+
+            return null;
+        }
+
+
 }
